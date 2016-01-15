@@ -11,38 +11,7 @@ int main ()
 	vector<string> features;
 	if(parseFile(c_myfile, &featureBitSet, &classMask, &features))
 	{
-		for(vector<boost::dynamic_bitset<> >::iterator ibit = featureBitSet.begin(); ibit != featureBitSet.end();  ++ibit)
-		{
-			cout << "size: " << (*ibit).size() << endl;
-		}
-		for(vector<string>::iterator ibit = features.begin(); ibit != features.end();  ++ibit)
-		{
-			cout << "size: " << (*ibit) << endl;
-		}
-		cout << classMask.size()  << endl;
-		string x;
-		boost::to_string(classMask, x);
-		cout << classMask.test(180) << endl;
-		cout << classMask.test(181) << endl;
-		cout << classMask.test(179) << endl;
-		cout << classMask.test(182) << endl;
-		cout << "bit: " << featureBitSet.size() << endl;
-		cout << "feat: " << features.size() << endl;
-		for(int i = 0; i < 304; ++i)
-		{
-			for(int ii = 0; ii < featureBitSet.size(); ++ii)
-			{
-				if(featureBitSet[ii].test(i))
-					cout <<	"'+',";
-				else
-					cout <<	"'-',";
-			}
-			if(classMask.test(i))
-			cout <<	"'+'";
-				else
-					cout <<	"'-'";			
-			cout << endl;
-		}
+		;
 	}
 	else
 	{
@@ -125,33 +94,4 @@ int parseFile(const char* file, vector<boost::dynamic_bitset<> > *featureBitSet,
 		return false;
 	}
 	return true;
-}
-
-int getdataPositionFomARFF(ifstream *myfile, int *featuresNumber, int *examplesNumber)
-{
-	typedef boost::tokenizer<boost::char_separator<char> > tokenizer;
-	boost::char_separator<char> sep(",");
-	string line;
-	int dataPos = 0;
-	
-	while(myfile->good())
-	{
-		getline(*myfile, line);
-		//iterate to data
-		if (std::regex_match (line, std::regex("@data") ))
-		{
-			dataPos = myfile->tellg();
-			getline(*myfile, line);
-			tokenizer tokens(line, sep);
-			for(tokenizer::iterator tok_iter = tokens.begin(); tok_iter != tokens.end(); ++tok_iter)
-				++(*featuresNumber);
-			while(myfile->good())
-			{
-				getline(*myfile, line);
-				++(*examplesNumber);
-			}
-		}
-	}
-	cout << "Number of examples: " << *examplesNumber << ", Number of features: " << *featuresNumber << endl;
-	return dataPos;
 }
