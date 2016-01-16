@@ -1,6 +1,5 @@
 #include "cunjunction_learning.h"
 
-
 int main ()
 {
 	clock_t begin = clock();
@@ -11,7 +10,24 @@ int main ()
 	vector<string> features;
 	if(parseFile(c_myfile, &featureBitSet, &classMask, &features))
 	{
-		;
+		
+		conjunction_max a2;
+		a2.cover = 2;
+		conjunction_max a4;
+		a4.cover = 4;
+		conjunction_max a3;
+		a3.cover = 3;
+		conjunction_max a1;
+		a1.cover = 1;
+		
+		max_heap.push(a1);
+		max_heap.push(a2);
+		max_heap.push(a3);
+		max_heap.push(a4);
+		
+		cout << "max size: " << max_heap.size() << endl;
+		checkQueueMaxLimit(&max_heap);
+		cout << "max size: " << max_heap.size() << endl;		
 	}
 	else
 	{
@@ -94,4 +110,52 @@ int parseFile(const char* file, vector<boost::dynamic_bitset<> > *featureBitSet,
 		return false;
 	}
 	return true;
+}
+
+bool swap(std::priority_queue<conjunction_max> *max_heap, std::priority_queue<conjunction_min> *min_heap)
+{
+	while(!max_heap->empty())
+	{
+		conjunction_max tmp = max_heap->top();
+		conjunction_min tmp_min;
+		
+		tmp_min.id = tmp.id;
+		tmp_min.cover = tmp.cover;
+		
+		min_heap->push(tmp_min);
+		max_heap->pop();
+		;
+	}
+}
+
+bool swap(std::priority_queue<conjunction_min> *min_heap, std::priority_queue<conjunction_max> *max_heap)
+{
+	while(!min_heap->empty())
+	{
+		conjunction_min tmp = min_heap->top();
+		conjunction_max tmp_max;
+		
+		tmp_max.id = tmp.id;
+		tmp_max.cover = tmp.cover;
+		
+		max_heap->push(tmp_max);
+		min_heap->pop();
+		;
+	}
+}
+
+void checkQueueMaxLimit(std::priority_queue<conjunction_max> *max_heap)
+{
+	int heap_size = max_heap->size();
+	if(heap_size > QUEUE_LIMIT)
+	{
+		int toDelete = heap_size - QUEUE_LIMIT;
+		swap(max_heap, &min_heap);
+		for(int i = 0; i <= toDelete; ++i)
+		{
+			if(!min_heap.empty())
+				min_heap.pop();
+		}
+		swap(&min_heap, max_heap);
+	}
 }
