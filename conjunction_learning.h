@@ -66,6 +66,17 @@ struct conjunction_min
     }	
 };
 
+struct statistics
+{
+	int TP;
+	int FP;
+	int FN;
+	int TN;
+	double ACC;
+};
+
+std::vector<conjunction_max> train();
+void test(std::vector<conjunction_max> *rules);
 bool parseCommandLineParametrs(int argc, char* argv[]);
 int parseFile(const char* file, vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask, vector<string> *features);
 int getdataPositionFomARFF(ifstream *myfile, int *featuresNumber, int *examplesNumber);
@@ -80,3 +91,6 @@ string generateHashKey(boost::dynamic_bitset<> *best);
 void eraseCoveredExamples(conjunction_max best, vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask);
 void countPN(boost::dynamic_bitset<> *bitset, int *P, int *N);
 bool isBetter(conjunction_max *bestConjunction, conjunction_max *max_heap_top);
+void printSettings();
+int countTrue(boost::dynamic_bitset<> *bitset);
+statistics evaluateDataset(vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask, std::vector<conjunction_max> *rules);

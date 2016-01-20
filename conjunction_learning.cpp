@@ -21,26 +21,24 @@ int main(int argc, char* argv[])
 		return EXIT_FAILURE;
 	}
 	else
-	{
-		cout << "[train " << TRAIN  << "]" << endl;
-		if(TEST_FLAG)
-			cout << "[test " << TEST << "]" << endl;
-		cout << "[max_rules " << RULES_LIMIT << "]" << endl;
-		if(ITERATE_LIMIT == INT_MAX)
-			cout << "[max_iteration UNLIMITED]" << endl;
-		else
-			cout << "[max_iteration " << ITERATE_LIMIT << "]" << endl;
-		if(QUEUE_UNLIMITED)
-			cout << "[max_queue UNLIMITED]" << endl;
-		else
-			cout << "[max_queue " << QUEUE_LIMIT << "]" << endl;
-		if(VERBOSE)
-			cout << "[VERBOSE mode]" << endl;
-		if(DEBUG)
-			cout << "[DEBUG mode]" << endl;
-		cout << endl;
-	}
+		printSettings();
+
+	//TRAIN
+	std::vector<conjunction_max> bestConjunctionS = train();
+	if(bestConjunctionS.empty())
+		return EXIT_FAILURE;
 	
+	//TEST
+	if(TEST_FLAG)
+	{
+		test(&bestConjunctionS);
+	}
+
+	return EXIT_SUCCESS;		
+}
+
+std::vector<conjunction_max> train()
+{
 	clock_t begin = clock();
 	string myfile(TRAIN);
 	const char* c_myfile = myfile.c_str();
@@ -55,6 +53,8 @@ int main(int argc, char* argv[])
 	if(parseFile(c_myfile, &featureBitSet, &classMask, &features))
 	{
 		conjunction_max bestConjunction;
+		vector<boost::dynamic_bitset<> > featureBitSet_orig = featureBitSet;
+		boost::dynamic_bitset<> classMask_orig = classMask;
 		for(int irule = 0; irule < RULES_LIMIT; ++irule)
 		{
 			std::vector<conjunction_max> baseTerms = initPriorityQueue(&max_heap, &featureBitSet, &features, &classMask);
@@ -126,16 +126,47 @@ int main(int argc, char* argv[])
 				break;
 		}
 		
+		//statistics
+		statistics traindataset = evaluateDataset(&featureBitSet_orig, &classMask_orig, &bestConjunctionS);
+		cout << "Confusion table on TRAIN dataset:" << endl;
+		cout << "TP " << traindataset.TP << "\t FP " << traindataset.FP << endl;
+		cout << "FN " << traindataset.FN << "\t TN " << traindataset.TN << endl;
+		double acc = (traindataset.TP+traindataset.TN)/ double (traindataset.FP+traindataset.FN+traindataset.TP+traindataset.TN);
+		cout.precision(5);
+		cout << "ACC " << acc << endl;
 	}
 	else
 	{
 		cerr << "Unable to read file " << endl;
-		return EXIT_FAILURE;
+		return bestConjunctionS;
 	}
 	clock_t end = clock();
 	double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
 	cout  << "Elapsed time: " << elapsed_secs << endl;
-	return EXIT_SUCCESS;		
+	return bestConjunctionS;
+}
+
+void test(std::vector<conjunction_max> *rules)
+{
+	string myfile(TEST);
+	const char* c_myfile = myfile.c_str();
+	vector<boost::dynamic_bitset<> > featureBitSet;
+	boost::dynamic_bitset<> classMask;
+	vector<string> features;
+
+	
+	if(parseFile(c_myfile, &featureBitSet, &classMask, &features))
+	{
+		statistics test = evaluateDataset(&featureBitSet, &classMask, rules);
+		cout << "Confusion table on Test dataset:" << endl;
+		cout << "TP " << test.TP << "\t FP " << test.FP << endl;
+		cout << "FN " << test.FN << "\t TN " << test.TN << endl;
+		double acc = (test.TP+test.TN)/ double (test.FP+test.FN+test.TP+test.TN);
+		cout.precision(5);
+		cout << "ACC " << acc << endl;
+	}
+	else
+		cerr << "Unable to read file" << endl;
 }
 
 bool parseCommandLineParametrs(int argc, char* argv[])
@@ -526,4 +557,76 @@ bool isBetter(conjunction_max *bestConjunction, conjunction_max *max_heap_top)
 		}
 	}
 	return false;
+}
+
+void printSettings()
+{
+	cout << "[train " << TRAIN  << "]" << endl;
+	if(TEST_FLAG)
+		cout << "[test " << TEST << "]" << endl;
+	cout << "[max_rules " << RULES_LIMIT << "]" << endl;
+	if(ITERATE_LIMIT == INT_MAX)
+		cout << "[max_iteration UNLIMITED]" << endl;
+	else
+		cout << "[max_iteration " << ITERATE_LIMIT << "]" << endl;
+	if(QUEUE_UNLIMITED)
+		cout << "[max_queue UNLIMITED]" << endl;
+	else
+		cout << "[max_queue " << QUEUE_LIMIT << "]" << endl;
+	if(VERBOSE)
+		cout << "[VERBOSE mode]" << endl;
+	if(DEBUG)
+		cout << "[DEBUG mode]" << endl;
+	cout << endl;
+}
+
+int countTrue(boost::dynamic_bitset<> *bitset)
+{
+	int count = 0;
+	for(int i = 0; i < bitset->size(); ++i)
+	{
+		if(bitset->test(i))
+			++count;
+	}
+	return count;
+}
+
+statistics evaluateDataset(vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask, std::vector<conjunction_max> *rules)
+{
+	boost::dynamic_bitset<> sumCoverage;
+	sumCoverage.resize(classMask->size(), false);
+	for(std::vector<conjunction_max>::iterator irule = rules->begin(); irule != rules->end(); ++irule)
+	{
+		boost::dynamic_bitset<> res;
+		res.resize(classMask->size(), true);
+		//create a rule
+		 for(int ibit = 0; ibit < (*irule).whichTerms.size(); ++ibit)
+		 {
+			 if((*irule).whichTerms.test(ibit))
+				res &= (*featureBitSet)[ibit];
+		 }
+		//res &= *classMask;			
+		sumCoverage |= res;
+	}
+	
+	boost::dynamic_bitset<> TP = sumCoverage;
+	boost::dynamic_bitset<> FP = sumCoverage;
+	boost::dynamic_bitset<> TN = ~sumCoverage;
+	boost::dynamic_bitset<> FN = sumCoverage;
+	
+	sumCoverage &= *classMask;
+	
+	TP &= *classMask; //count true
+	TN &= ~(*classMask);//count true
+	
+	boost::dynamic_bitset<> FPtmp = FP;
+	FPtmp ^= *classMask;
+	FP &=  FPtmp; //count true
+	
+	FN ^= *classMask;
+	FN &=  *classMask; //count true
+	
+	statistics dataset = {.TP = countTrue(&TP), .FP = countTrue(&FP), .FN = countTrue(&FN), .TN = countTrue(&TN), .ACC = 0};
+	dataset.ACC = (dataset.TP+dataset.TN)/ double (dataset.FP+dataset.FN+dataset.TP+dataset.TN);
+	return dataset;
 }
