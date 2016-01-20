@@ -40,6 +40,7 @@ struct conjunction_max
 	boost::dynamic_bitset<> examples;	//vector of coverage
 	boost::dynamic_bitset<> toExpand;	//which terms can be expanded
 	boost::dynamic_bitset<> whichTerms;	//which terms were used during contruction process
+	int length;
 
 	bool operator<(const conjunction_max& rhs) const
     {
@@ -57,6 +58,7 @@ struct conjunction_min
 	boost::dynamic_bitset<> examples;	//vector of coverage
 	boost::dynamic_bitset<> toExpand;	//which terms can be expanded
 	boost::dynamic_bitset<> whichTerms;	//which terms were used during contruction process
+	int length;
 	
 	bool operator<(const conjunction_min& rhs) const
     {
@@ -77,3 +79,4 @@ string getPrintableConjunction(conjunction_max best, std::vector<string> *featur
 string generateHashKey(boost::dynamic_bitset<> *best);
 void eraseCoveredExamples(conjunction_max best, vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask);
 void countPN(boost::dynamic_bitset<> *bitset, int *P, int *N);
+bool isBetter(conjunction_max *bestConjunction, conjunction_max *max_heap_top);

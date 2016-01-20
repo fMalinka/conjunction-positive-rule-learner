@@ -65,9 +65,24 @@ int main(int argc, char* argv[])
 				break;
 			
 			cout << "[RULE " << irule+1 << "]" <<" [" << Pclass << "/" << Nclass << "|" << classMask.size() << "] POS/NEG|TOTAL" <<endl;
+			
 			//generate all options
 			bestConjunction = max_heap.top();
-			//cout << getPrintableConjunction(bestConjunction, &features) <<  " | cover PN " << bestConjunction.cover <<endl;
+			if(VERBOSE)
+			{
+				cout << "\tBest initial: " << getPrintableConjunction(max_heap.top(), &features) <<  " | cover ["  <<max_heap.top().P << "/" << max_heap.top().N << "|" << max_heap.top().cover << "]";
+				if(DEBUG)
+					{
+						string q;
+						if(QUEUE_UNLIMITED)
+							q = "UNLIMITED";
+						else
+							q = to_string(QUEUE_LIMIT);
+						cout << " QUEUE [" << max_heap.size()  << "| " << q << "]";
+					}
+					 cout << endl;
+			}
+				
 			for(int i = 0; i < ITERATE_LIMIT; ++i)
 			{
 				if(max_heap.empty())
@@ -78,12 +93,13 @@ int main(int argc, char* argv[])
 					checkQueueMaxLimit(&max_heap, &min_heap);
 					
 				//find the best rule with MIN coveradge and MIN negative examples
-				if(bestConjunction.cover <= max_heap.top().cover && bestConjunction.N > max_heap.top().N && max_heap.top().cover != 0 && max_heap.top().N != 0)
+				conjunction_max candidate = max_heap.top();
+				if(isBetter(&bestConjunction, &candidate))
 					bestConjunction = max_heap.top();
 					
 				if(VERBOSE)
 				{
-					cout << "\ti:" << i+1 << " " << getPrintableConjunction(max_heap.top(), &features) <<  " | cover ["  <<max_heap.top().P << "/" << max_heap.top().N << "|" << max_heap.top().cover << "]";
+					cout << "\ti:" << i+1 << " " << getPrintableConjunction(candidate, &features) <<  " | cover ["  <<candidate.P << "/" << candidate.N << "|" << candidate.cover << "]";
 					if(DEBUG)
 					{
 						string q;
@@ -96,8 +112,10 @@ int main(int argc, char* argv[])
 					 cout << endl;
 				}
 			}
-			if(bestConjunction.cover == 0)
-				break;
+			//if(bestConjunction.cover == 0)
+			//{
+			//	break;
+			//}
 			cout << "BEST: "  << getPrintableConjunction(bestConjunction, &features) <<  " | cover ["  <<bestConjunction.P << "/" << bestConjunction.N << "|" << bestConjunction.cover << "]" << endl;
 			eraseCoveredExamples(bestConjunction, &featureBitSet, &classMask);
 			while(!max_heap.empty())
@@ -264,6 +282,7 @@ bool swap(std::priority_queue<conjunction_max> *max_heap, std::priority_queue<co
 		tmp_min.examples = tmp.examples;
 		tmp_min.toExpand = tmp.toExpand;
 		tmp_min.whichTerms = tmp.whichTerms;
+		tmp_min.length = tmp.length;
 		
 		min_heap->push(tmp_min);
 		max_heap->pop();
@@ -285,6 +304,7 @@ bool swap(std::priority_queue<conjunction_min> *min_heap, std::priority_queue<co
 		tmp_max.examples = tmp.examples;
 		tmp_max.toExpand = tmp.toExpand;
 		tmp_max.whichTerms = tmp.whichTerms;
+		tmp_max.length = tmp.length;
 		
 		max_heap->push(tmp_max);
 		min_heap->pop();
@@ -320,11 +340,15 @@ std::vector<conjunction_max> initPriorityQueue(std::priority_queue<conjunction_m
 		boost::dynamic_bitset<> whichTerms = ~toExpand;		
 		int P; int N;
 		int C = countCover(&(*ibit), classMask, &P, &N);
-		conjunction_max tmp = {.id = id, .cover = C, .P = P, .N = N, .examples = (*ibit), .toExpand = toExpand, .whichTerms = whichTerms};
-		max_heap->push(tmp);
-		++id;
+		conjunction_max tmp = {.id = id, .cover = C, .P = P, .N = N, .examples = (*ibit), .toExpand = toExpand, .whichTerms = whichTerms, .length = 1};
+		if(C != 0 && P != 0 && N != 0)
+		{
+			max_heap->push(tmp);
+			
+			
+		}
 		baseTerms.push_back(tmp);
-		 
+		++id;		 
 	}
 	return baseTerms;
 }
@@ -352,10 +376,8 @@ int countCover(boost::dynamic_bitset<> *example, boost::dynamic_bitset<> *classM
 
 bool generateNewConjunctions(std::priority_queue<conjunction_max> *max_heap, vector<boost::dynamic_bitset<> > *featureBitSet, boost::unordered_map<string, int> *CLOSED, boost::dynamic_bitset<> *classMask, std::vector<conjunction_max> *baseTerms)
 {
-	//typedef boost::unordered_map<boost::dynamic_bitset<>, int> generated_CLOSED;
 	conjunction_max best = max_heap->top();
 	string whichTermsID = generateHashKey(&(best.whichTerms));
-	//to_string(best.whichTerms, whichTermsID);
 	
 	//iterate until you find the best non-duplicate conjunction of terms
 	while((*CLOSED)[whichTermsID])
@@ -389,8 +411,10 @@ bool generateNewConjunctions(std::priority_queue<conjunction_max> *max_heap, vec
 				boost::dynamic_bitset<> newToExpand = ~newWhichTerms;
 				int Ptmp; int Ntmp;
 				int C = countCover(&(newExample), classMask, &Ptmp, &Ntmp);
-				conjunction_max tmp = {.id = -1, .cover = C, .P = Ptmp, .N = Ntmp, .examples = newExample, .toExpand = newToExpand, .whichTerms = newWhichTerms};
-				max_heap->push(tmp);
+				conjunction_max tmp = {.id = -1, .cover = C, .P = Ptmp, .N = Ntmp, .examples = newExample, .toExpand = newToExpand, .whichTerms = newWhichTerms, .length = best.length+1};
+				//dont push conjunction with zero P, N, cover
+				if(C =! 0 && Ptmp != 0 && Ntmp != 0)
+					max_heap->push(tmp);
 			}			 
 		}
 	} 	
@@ -479,4 +503,27 @@ void countPN(boost::dynamic_bitset<> *bitset, int *P, int *N)
 		else
 			++(*N);
 	}
+}
+
+bool isBetter(conjunction_max *bestConjunction, conjunction_max *max_heap_top)
+{	
+	if(bestConjunction->cover < max_heap_top->cover)
+		return true;
+	else if(bestConjunction->cover > max_heap_top->cover)
+		return false;
+	else // bestConjunction->cover == max_heap_top->cover
+	{
+		if(bestConjunction->N > max_heap_top->N)
+			return false;
+		else if(bestConjunction->N < max_heap_top->N)
+			return true;
+		else //(bestConjunction->N == max_heap_top->N
+		{
+			if(bestConjunction->length < max_heap_top->length)
+				return true;
+			else
+				return false;
+		}
+	}
+	return false;
 }
