@@ -11,6 +11,8 @@ int RULES_LIMIT = 10;
 int ITERATE_LIMIT = 100;
 int VERBOSE = 0;
 int DEBUG = 0;
+int ROC_FLAG = 0;
+string ROC;
 
 
 int main(int argc, char* argv[])
@@ -116,7 +118,7 @@ std::vector<conjunction_max> train()
 			//{
 			//	break;
 			//}
-			cout << "BEST: "  << getPrintableConjunction(bestConjunction, &features) <<  " | cover ["  <<bestConjunction.P << "/" << bestConjunction.N << "|" << bestConjunction.cover << "]" << endl;
+			cout << "BEST: "  << getPrintableConjunction(bestConjunction, &features) <<  " | cover ["  <<bestConjunction.P << "/" << bestConjunction.N << "|" << bestConjunction.cover << "]" << endl << endl;
 			eraseCoveredExamples(bestConjunction, &featureBitSet, &classMask);
 			while(!max_heap.empty())
 				max_heap.pop();
@@ -127,8 +129,8 @@ std::vector<conjunction_max> train()
 		}
 		
 		//statistics
-		statistics traindataset = evaluateDataset(&featureBitSet_orig, &classMask_orig, &bestConjunctionS);
-		cout << "Confusion table on TRAIN dataset:" << endl;
+		statistics traindataset = evaluateDataset(TRAIN_MODE, &featureBitSet_orig, &classMask_orig, &bestConjunctionS);
+		cout << "=== Error on training data ===" << endl << endl;
 		cout << "TP " << traindataset.TP << "\t FP " << traindataset.FP << endl;
 		cout << "FN " << traindataset.FN << "\t TN " << traindataset.TN << endl;
 		double acc = (traindataset.TP+traindataset.TN)/ double (traindataset.FP+traindataset.FN+traindataset.TP+traindataset.TN);
@@ -142,7 +144,7 @@ std::vector<conjunction_max> train()
 	}
 	clock_t end = clock();
 	double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-	cout  << "Elapsed time: " << elapsed_secs << endl;
+	cout  << "Time taken to build model: " << elapsed_secs  << "sec."<< endl << endl;
 	return bestConjunctionS;
 }
 
@@ -157,13 +159,23 @@ void test(std::vector<conjunction_max> *rules)
 	
 	if(parseFile(c_myfile, &featureBitSet, &classMask, &features))
 	{
-		statistics test = evaluateDataset(&featureBitSet, &classMask, rules);
-		cout << "Confusion table on Test dataset:" << endl;
+		statistics test = evaluateDataset(TEST_MODE, &featureBitSet, &classMask, rules);
+		cout << "=== Error on test data ===" << endl << endl;
 		cout << "TP " << test.TP << "\t FP " << test.FP << endl;
 		cout << "FN " << test.FN << "\t TN " << test.TN << endl;
 		double acc = (test.TP+test.TN)/ double (test.FP+test.FN+test.TP+test.TN);
 		cout.precision(5);
 		cout << "ACC " << acc << endl;
+		
+		//for(int i = 0; i < test.confidence.size(); ++i)
+		//{
+		//	cout << test.confidence[i] << endl;
+		//}
+		
+		//RFILE
+		if(ROC_FLAG)
+			generateRFile(&featureBitSet, &classMask, rules, &test);
+		
 	}
 	else
 		cerr << "Unable to read file" << endl;
@@ -219,6 +231,11 @@ bool parseCommandLineParametrs(int argc, char* argv[])
 			{
 				DEBUG = 1;
 			}
+			else if(std::string(argv[i]) == "--generateRFile")
+			{
+				ROC_FLAG = 1;
+				ROC = std::string(argv[i+1]);
+			}
 		}
 		if(!TRAIN_FLAG)
 			return false;
@@ -238,7 +255,7 @@ int parseFile(const char* file, vector<boost::dynamic_bitset<> > *featureBitSet,
 		int lineCollumn = 0;
 		string line;
 		
-		cout << "Parsing..." << endl;
+		//cout << "Parsing..." << endl;
  		while(myfile.good())
 		{
 			getline(myfile, line);
@@ -577,6 +594,8 @@ void printSettings()
 		cout << "[VERBOSE mode]" << endl;
 	if(DEBUG)
 		cout << "[DEBUG mode]" << endl;
+	if(ROC_FLAG)
+		cout << "[generateRFile " << ROC << "]" << endl;
 	cout << endl;
 }
 
@@ -591,9 +610,10 @@ int countTrue(boost::dynamic_bitset<> *bitset)
 	return count;
 }
 
-statistics evaluateDataset(vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask, std::vector<conjunction_max> *rules)
+statistics evaluateDataset(MODE mod, vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask, std::vector<conjunction_max> *rules)
 {
 	boost::dynamic_bitset<> sumCoverage;
+	vector<boost::dynamic_bitset<> > constructedRules;
 	sumCoverage.resize(classMask->size(), false);
 	for(std::vector<conjunction_max>::iterator irule = rules->begin(); irule != rules->end(); ++irule)
 	{
@@ -605,8 +625,44 @@ statistics evaluateDataset(vector<boost::dynamic_bitset<> > *featureBitSet, boos
 			 if((*irule).whichTerms.test(ibit))
 				res &= (*featureBitSet)[ibit];
 		 }
-		//res &= *classMask;			
+		//res &= *classMask;
+		if(mod == TRAIN_MODE)
+		{
+			boost::dynamic_bitset<> acc_res = res;
+			acc_res &= *classMask;
+			(*irule).acc = countTrue(&acc_res) / double (countTrue(&res));
+		}
+		else
+			constructedRules.push_back(res);
+			
 		sumCoverage |= res;
+		
+		cout.precision(5);
+		cout << "ACC " << (*irule).acc << endl;
+	}
+	
+	std::vector<double> confidence;
+	if(mod == TEST_MODE)
+	{
+		for(int ibit = 0; ibit < sumCoverage.size(); ++ibit)
+		{
+			int count = 0;
+			double sum = 0.0;
+			for(int irule = 0; irule < constructedRules.size(); ++irule)
+			{
+				if(sumCoverage.test(ibit) && constructedRules[irule].test(ibit))
+				{
+					sum += rules->at(irule).acc;
+					count++;
+				}
+			}
+			double conf;
+			if(count == 0)
+				conf = 0;
+			else
+				conf = sum/ double(count);
+			confidence.push_back(conf);			
+		}
 	}
 	
 	boost::dynamic_bitset<> TP = sumCoverage;
@@ -626,7 +682,81 @@ statistics evaluateDataset(vector<boost::dynamic_bitset<> > *featureBitSet, boos
 	FN ^= *classMask;
 	FN &=  *classMask; //count true
 	
-	statistics dataset = {.TP = countTrue(&TP), .FP = countTrue(&FP), .FN = countTrue(&FN), .TN = countTrue(&TN), .ACC = 0};
+	statistics dataset = {.TP = countTrue(&TP), .FP = countTrue(&FP), .FN = countTrue(&FN), .TN = countTrue(&TN), .ACC = 0, .confidence = confidence};
 	dataset.ACC = (dataset.TP+dataset.TN)/ double (dataset.FP+dataset.FN+dataset.TP+dataset.TN);
 	return dataset;
+}
+
+void generateRFile(vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask, std::vector<conjunction_max> *rules, statistics *test)
+{
+	string rtext = "if(!library(ROCR, logical.return = TRUE))\
+					{\
+					  install.packages(ROCR)\
+					}\\n";
+					
+	boost::dynamic_bitset<> sumCoverage;
+	sumCoverage.resize(classMask->size(), false);
+	for(std::vector<conjunction_max>::iterator irule = rules->begin(); irule != rules->end(); ++irule)
+	{
+		boost::dynamic_bitset<> res;
+		res.resize(classMask->size(), true);
+		//create a rule
+		 for(int ibit = 0; ibit < (*irule).whichTerms.size(); ++ibit)
+		 {
+			 if((*irule).whichTerms.test(ibit))
+				res &= (*featureBitSet)[ibit];
+		 }
+		//res &= *classMask;			
+		sumCoverage |= res;
+	}
+	
+	string predictors;// = "pr <- c(";
+	string labels;// = "lb <- c(";
+	
+	for(int i = 0; i < sumCoverage.size(); ++i)
+	{
+		predictors += to_string(test->confidence.at(i));
+		predictors += ",";
+			
+		if(classMask->test(i))
+			labels += "1,";
+		else
+			labels += "0,";
+	}
+	predictors.pop_back();
+	//predictors += ")";
+	labels.pop_back();
+	//labels += ")";
+	
+	//rtext += predictors + "\n";
+	//rtext += labels + "\n";
+	
+	rtext +=	"png()\
+pred <- prediction( ROCR.simple$predictions, ROCR.simple$labels)\
+perf <- performance(pred,\"tpr\",\"fpr\")\
+plot(perf)\
+dev.off()\
+\
+\
+#auc\
+perf <- performance(pred, measure = \"auc\", x.measure = \"cutoff\")\
+cat(\"AUC =\",deparse(as.numeric(perf@y.values)),\"\n\")\
+\
+#acc\
+perf <- performance(pred, measure = \"acc\", x.measure = \"cutoff\")\
+max(perf@y.values[[1]])";
+	
+	//write to file
+	std::ofstream out(ROC);
+	out << rtext;
+	out.close();
+	
+	std::ofstream outData(ROC+"_data");
+	outData << predictors;
+	outData << endl;
+	outData << labels;
+	outData << endl;
+	outData.close();
+	
+	
 }

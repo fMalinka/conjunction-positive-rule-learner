@@ -19,6 +19,8 @@ using namespace boost;
 
 const int BITSET_SIZE = 100000;
 
+enum MODE {TRAIN_MODE, TEST_MODE};
+
 const string HELP = "Conjunction positive rule learner - Frantisek Malinka\n\
 Parameters:\n\
 conjunction_learning --train FILE [--test FILE] [--max_rules UINT] [--max_iteration UINT] [--max_queue UINT]\n\
@@ -29,6 +31,7 @@ conjunction_learning --train FILE [--test FILE] [--max_rules UINT] [--max_iterat
 \t--max_queue UINT - upper limit for number of candidates in a priority queue. DEFAULT 10000. IF 0 then queue is unlimited.\n\
 \t--verbose - verbose mode\n\
 \t--debug - For debug mode use --debug and --verbose\n\
+-\t--generateRFile FILE - generate R file for computing ROC curve and AUC for TEST dataset\n\
 ";
 
 struct conjunction_max
@@ -41,6 +44,7 @@ struct conjunction_max
 	boost::dynamic_bitset<> toExpand;	//which terms can be expanded
 	boost::dynamic_bitset<> whichTerms;	//which terms were used during contruction process
 	int length;
+	double acc;
 
 	bool operator<(const conjunction_max& rhs) const
     {
@@ -59,6 +63,7 @@ struct conjunction_min
 	boost::dynamic_bitset<> toExpand;	//which terms can be expanded
 	boost::dynamic_bitset<> whichTerms;	//which terms were used during contruction process
 	int length;
+	double acc;
 	
 	bool operator<(const conjunction_min& rhs) const
     {
@@ -73,6 +78,7 @@ struct statistics
 	int FN;
 	int TN;
 	double ACC;
+	std::vector<double> confidence;	//confidence for test data
 };
 
 std::vector<conjunction_max> train();
@@ -93,4 +99,5 @@ void countPN(boost::dynamic_bitset<> *bitset, int *P, int *N);
 bool isBetter(conjunction_max *bestConjunction, conjunction_max *max_heap_top);
 void printSettings();
 int countTrue(boost::dynamic_bitset<> *bitset);
-statistics evaluateDataset(vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask, std::vector<conjunction_max> *rules);
+statistics evaluateDataset(MODE mod, vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask, std::vector<conjunction_max> *rules);
+void generateRFile(vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynamic_bitset<> *classMask, std::vector<conjunction_max> *rules, statistics *test);
