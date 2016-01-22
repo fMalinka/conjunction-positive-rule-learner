@@ -658,7 +658,7 @@ statistics evaluateDataset(MODE mod, vector<boost::dynamic_bitset<> > *featureBi
 			}
 			double conf;
 			if(count == 0)
-				conf = 0;
+				conf = 0.0001;
 			else
 				conf = sum/ double(count);
 			confidence.push_back(conf);			
@@ -712,39 +712,42 @@ void generateRFile(vector<boost::dynamic_bitset<> > *featureBitSet, boost::dynam
 	
 	string predictors;// = "pr <- c(";
 	string labels;// = "lb <- c(";
+	string vectors;
 	
 	for(int i = 0; i < sumCoverage.size(); ++i)
 	{
-		predictors += to_string(test->confidence.at(i));
-		predictors += ",";
+		predictors = to_string(test->confidence.at(i));
 			
 		if(classMask->test(i))
-			labels += "1,";
+			labels = "1";
 		else
-			labels += "0,";
+			labels = "0";
+		vectors += predictors + "," + labels + "\n";
 	}
-	predictors.pop_back();
+	//predictors.pop_back();
 	//predictors += ")";
-	labels.pop_back();
+	//labels.pop_back();
 	//labels += ")";
 	
 	//rtext += predictors + "\n";
 	//rtext += labels + "\n";
 	
-	rtext +=	"png()\
-pred <- prediction( ROCR.simple$predictions, ROCR.simple$labels)\
-perf <- performance(pred,\"tpr\",\"fpr\")\
-plot(perf)\
-dev.off()\
-\
-\
-#auc\
-perf <- performance(pred, measure = \"auc\", x.measure = \"cutoff\")\
-cat(\"AUC =\",deparse(as.numeric(perf@y.values)),\"\n\")\
-\
-#acc\
-perf <- performance(pred, measure = \"acc\", x.measure = \"cutoff\")\
-max(perf@y.values[[1]])";
+	rtext += "if(!library('ROCR', logical.return = TRUE))\n\
+{\n\
+  install.packages('ROCR')\n\
+}\n\
+library('ROCR')\n\
+\n\
+file <- read.csv(file = '" + ROC + "_data', header = FALSE, stringsAsFactors = FALSE)\n\
+\n\
+png()\n\
+pred <- prediction( file[,1], file[,2])\n\
+perf <- performance(pred,'tpr','fpr')\n\
+plot(perf)\n\
+dev.off()\n\
+\n\
+aucperf <- performance(pred, measure = 'auc', x.measure = 'cutoff')\n\
+cat('AUC =',deparse(as.numeric(aucperf@y.values)))";
 	
 	//write to file
 	std::ofstream out(ROC);
@@ -752,10 +755,7 @@ max(perf@y.values[[1]])";
 	out.close();
 	
 	std::ofstream outData(ROC+"_data");
-	outData << predictors;
-	outData << endl;
-	outData << labels;
-	outData << endl;
+	outData << vectors;
 	outData.close();
 	
 	
